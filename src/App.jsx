@@ -16,6 +16,15 @@ export default function App() {
   const [showEditStoreModal, setShowEditStoreModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
+  const [movingEntranceId, setMovingEntranceId] = useState(null);
+  const [movingProductId, setMovingProductId] = useState(null);
+
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteTargetItemId, setNoteTargetItemId] = useState(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteImage, setNoteImage] = useState(null);
+  const [noteReadOnly, setNoteReadOnly] = useState(false);
+
   const [addingEntrance, setAddingEntrance] = useState(false);
   const [pendingProductPosition, setPendingProductPosition] = useState(null);
   const [pendingEntrancePosition, setPendingEntrancePosition] = useState(null);
@@ -29,9 +38,43 @@ export default function App() {
   const fileInputRef = useRef(null);
   const productImageInputRef = useRef(null);
   const editStoreMapInputRef = useRef(null);
+  const noteImageInputRef = useRef(null);
 
   // Helper actions
   const handleMapClick = (position) => {
+    if (movingEntranceId) {
+      store.setStores(prev => prev.map(s =>
+        s.id === store.currentStoreId
+          ? {
+            ...s,
+            entrances: (s.entrances || []).map(e =>
+              e.id === movingEntranceId ? { ...e, x: position.x, y: position.y } : e
+            ),
+          }
+          : s
+      ));
+      setMovingEntranceId(null);
+      setAddingEntrance(false);
+      setPendingEntrancePosition(null);
+      return;
+    }
+
+    if (movingProductId) {
+      store.setStores(prev => prev.map(s =>
+        s.id === store.currentStoreId
+          ? {
+            ...s,
+            products: (s.products || []).map(p =>
+              p.id === movingProductId ? { ...p, position } : p
+            ),
+          }
+          : s
+      ));
+      setMovingProductId(null);
+      setPendingProductPosition(null);
+      return;
+    }
+
     if (addingEntrance) {
       setPendingEntrancePosition(position);
       setShowEntranceModal(true);
@@ -138,6 +181,37 @@ export default function App() {
     setShowEntranceModal(false);
   };
 
+  const openNoteForItem = (itemId, readOnly = false) => {
+    const item = store.shoppingList.find(i => i.id === itemId);
+    if (!item) return;
+    setNoteTargetItemId(itemId);
+    setNoteText(item.note || "");
+    setNoteImage(item.noteImage || null);
+    setNoteReadOnly(readOnly);
+    setShowNoteModal(true);
+  };
+
+  const saveNoteForItem = () => {
+    if (!noteTargetItemId) return;
+    if (!noteReadOnly) {
+      store.setItemNote(noteTargetItemId, noteText.trim(), noteImage);
+    }
+    setShowNoteModal(false);
+    setNoteTargetItemId(null);
+    setNoteText("");
+    setNoteImage(null);
+  };
+
+  const handleNoteImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setNoteImage(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const addStore = () => {
     const name = newStoreName.trim();
     if (!name) return;
@@ -146,6 +220,7 @@ export default function App() {
       id,
       name,
       mapImage: null,
+      favorite: true,
       entrances: [],
       products: [],
     }]);
@@ -215,6 +290,16 @@ export default function App() {
     { id: "ruta", label: "Comprar", icon: "🛒" },
   ];
 
+  const allProductIds = new Set();
+  store.stores.forEach(s => {
+    (s.products || []).forEach(p => {
+      allProductIds.add(p.id);
+    });
+  });
+  const globalPendingCount = store.shoppingList.filter(
+    i => !i.done && allProductIds.has(i.productId)
+  ).length;
+
   return (
     <div style={S.app}>
       <div style={S.header}>
@@ -224,8 +309,8 @@ export default function App() {
           <div style={S.headerSub}>Optimizador de compra</div>
         </div>
         {store.shoppingStarted && <span style={S.tag("#4caf50")}>● EN COMPRA</span>}
-        {store.shoppingList.filter(i => !i.done).length > 0 && !store.shoppingStarted && (
-          <div style={S.badge}>{store.shoppingList.filter(i => !i.done).length}</div>
+        {globalPendingCount > 0 && !store.shoppingStarted && (
+          <div style={S.badge}>{globalPendingCount}</div>
         )}
       </div>
 
@@ -242,6 +327,7 @@ export default function App() {
         <TabLista
           {...store}
           setShowStoreModal={setShowStoreModal}
+          openNoteForItem={openNoteForItem}
         />
       )}
 
@@ -252,6 +338,10 @@ export default function App() {
           handleMapUpload={handleMapUpload}
           addingEntrance={addingEntrance}
           setAddingEntrance={setAddingEntrance}
+          movingEntranceId={movingEntranceId}
+          setMovingEntranceId={setMovingEntranceId}
+          movingProductId={movingProductId}
+          setMovingProductId={setMovingProductId}
           openEditStore={openEditStore}
           handleMapClick={handleMapClick}
           startEditProduct={startEditProduct}
@@ -259,13 +349,68 @@ export default function App() {
         />
       )}
 
-      {store.tab === "ruta" && <TabComprar {...store} />}
+      {store.tab === "ruta" && (
+        <TabComprar
+          {...store}
+          openNoteForItem={openNoteForItem}
+        />
+      )}
 
       {/* MODALS */}
       {showStoreModal && (
         <div style={S.modal} onClick={() => setShowStoreModal(false)}>
           <div style={S.modalContent} onClick={e => e.stopPropagation()}>
-            <div style={S.modalTitle}>➕ Añadir supermercado</div>
+            <div style={S.modalTitle}>➕ Añadir / favoritos</div>
+
+            {store.stores.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#4fc3f7", marginBottom: 8 }}>
+                  Supermercados guardados
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[...store.stores].sort((a, b) => {
+                    if (a.favorite === b.favorite) return a.name.localeCompare(b.name);
+                    return a.favorite ? -1 : 1;
+                  }).map(s => (
+                    <div
+                      key={s.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        fontSize: 13,
+                      }}
+                    >
+                      <span>{s.name}</span>
+                      <button
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 18,
+                          color: s.favorite ? "#ff6b6b" : "#6b8a9e",
+                        }}
+                        onClick={() => {
+                          store.setStores(prev => prev.map(st =>
+                            st.id === s.id ? { ...st, favorite: !st.favorite } : st
+                          ));
+                        }}
+                      >
+                        {s.favorite ? "❤️" : "🤍"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#4fc3f7", marginBottom: 8 }}>
+              Nuevo supermercado
+            </div>
             <input
               style={S.input}
               placeholder="Nombre..."
@@ -273,7 +418,7 @@ export default function App() {
               onChange={e => setNewStoreName(e.target.value)}
             />
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button style={{ ...S.btnOutline, flex: 1 }} onClick={() => setShowStoreModal(false)}>Cancelar</button>
+              <button style={{ ...S.btnOutline, flex: 1 }} onClick={() => setShowStoreModal(false)}>Cerrar</button>
               <button style={{ ...S.btn(), flex: 1 }} onClick={addStore}>Crear</button>
             </div>
           </div>
@@ -430,6 +575,99 @@ export default function App() {
               >
                 Guardar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNoteModal && (
+        <div style={S.modal} onClick={() => setShowNoteModal(false)}>
+          <div style={S.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={S.modalTitle}>🔖 Nota del producto</div>
+            <textarea
+              style={{ ...S.input, minHeight: 80, resize: "vertical" }}
+              placeholder="Escribe aquí tu nota (código descuento, marca exacta, etc.)..."
+              value={noteText}
+              onChange={e => !noteReadOnly && setNoteText(e.target.value)}
+              readOnly={noteReadOnly}
+            />
+            <div style={{ marginTop: 12, marginBottom: 12 }}>
+              {!noteReadOnly && (
+                <input
+                  ref={noteImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleNoteImageUpload}
+                />
+              )}
+              {noteImage ? (
+                <div>
+                  <img
+                    src={noteImage}
+                    alt="Nota"
+                    style={{ width: "100%", borderRadius: 10, marginBottom: 8 }}
+                  />
+                  {!noteReadOnly && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        style={{ ...S.btnOutline, flex: 1 }}
+                        onClick={() => noteImageInputRef.current?.click()}
+                      >
+                        Cambiar imagen
+                      </button>
+                      <button
+                        style={{
+                          ...S.btnOutline,
+                          flex: 1,
+                          borderColor: "#ff6b6b",
+                          color: "#ff6b6b",
+                        }}
+                        onClick={() => setNoteImage(null)}
+                      >
+                        Quitar imagen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                !noteReadOnly && (
+                  <button
+                    style={{ ...S.btn("#ff9800"), width: "100%" }}
+                    onClick={() => noteImageInputRef.current?.click()}
+                  >
+                    📷 Añadir imagen a la nota (opcional)
+                  </button>
+                )
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                style={{ ...S.btnOutline, flex: 1 }}
+                onClick={() => {
+                  setShowNoteModal(false);
+                  setNoteTargetItemId(null);
+                  setNoteText("");
+                  setNoteImage(null);
+                }}
+              >
+                Cancelar
+              </button>
+              {!noteReadOnly ? (
+                <button
+                  style={{ ...S.btn(), flex: 1 }}
+                  onClick={saveNoteForItem}
+                >
+                  Guardar
+                </button>
+              ) : (
+                <button
+                  style={{ ...S.btn(), flex: 1 }}
+                  onClick={() => setShowNoteModal(false)}
+                >
+                  Cerrar
+                </button>
+              )}
             </div>
           </div>
         </div>

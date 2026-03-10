@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MapCanvas } from "../MapCanvas";
 import { CATEGORIES } from "../../constants";
 import { S } from "../../styles";
@@ -15,8 +16,10 @@ export function TabComprar({
     route,
     stopShopping,
     toggleDone,
-    markAllStopDone
+    markAllStopDone,
+    nextStop
 }) {
+    const [showNotes, setShowNotes] = useState(false);
     const itemsWithLocation = shoppingList.filter(si => {
         const product = currentStore?.products?.find(p => p.id === si.productId);
         return product && !si.done;
@@ -51,7 +54,12 @@ export function TabComprar({
                                             fontSize: 13,
                                             fontWeight: 700,
                                         }}
-                                        onClick={() => setSelectedEntrance(entranceItem.id)}
+                                        onClick={() => {
+                                            setSelectedEntrance(entranceItem.id);
+                                            if (!selectedExit || selectedExit === selectedEntrance) {
+                                                setSelectedExit(entranceItem.id);
+                                            }
+                                        }}
                                     >
                                         🚪 {entranceItem.name}
                                     </button>
@@ -128,7 +136,9 @@ export function TabComprar({
                 <>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                         <div>
-                            <div style={{ fontSize: 13, color: "#6b8a9e" }}>Paso {routeStep + 1} de {route.length}</div>
+                            <div style={{ fontSize: 13, color: "#6b8a9e" }}>
+                                Paso {Math.min(routeStep + 1, route.length)} de {route.length}
+                            </div>
                             <div style={{ fontSize: 16, fontWeight: 700 }}>🛒 Ruta activa</div>
                         </div>
                         <button style={{ ...S.btnOutline, color: "#ff6b6b", borderColor: "#ff6b6b" }} onClick={stopShopping}>
@@ -146,6 +156,7 @@ export function TabComprar({
                             currentStep={routeStep}
                             entrance={entrance}
                             exit={exit}
+                            orientationEntrance={entrance}
                         />
                         <div style={{ display: "flex", gap: 8, marginTop: 10, fontSize: 10 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -161,6 +172,61 @@ export function TabComprar({
                                 <span style={{ color: "#6b8a9e" }}>Pendiente</span>
                             </div>
                         </div>
+
+                        {shoppingList.some(i => {
+                            if (!i.note) return false;
+                            const product = currentStore?.products?.find(p => p.id === i.productId);
+                            return !!product;
+                        }) && (
+                            <div style={{ marginTop: 12 }}>
+                                <button
+                                    style={{ ...S.btn("#ff9800"), width: "100%", fontSize: 13, padding: "10px" }}
+                                    onClick={() => setShowNotes(v => !v)}
+                                >
+                                    {showNotes ? "Ocultar notas" : `Notas (${shoppingList.filter(i => {
+                                        if (!i.note) return false;
+                                        const product = currentStore?.products?.find(p => p.id === i.productId);
+                                        return !!product;
+                                    }).length})`}
+                                </button>
+                                {showNotes && (
+                                    <div style={{
+                                        marginTop: 10,
+                                        background: "rgba(0,0,0,0.25)",
+                                        borderRadius: 10,
+                                        padding: 10,
+                                        maxHeight: 200,
+                                        overflowY: "auto",
+                                        fontSize: 12,
+                                    }}>
+                                        {shoppingList.filter(i => i.note)
+                                            .map(item => {
+                                                const product = currentStore?.products?.find(p => p.id === item.productId);
+                                                if (!product) return null;
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        style={{
+                                                            display: "flex",
+                                                            flexDirection: "column",
+                                                            gap: 4,
+                                                            padding: "6px 0",
+                                                            borderBottom: "1px solid rgba(255,255,255,0.06)",
+                                                        }}
+                                                    >
+                                                        <div style={{ fontWeight: 600, color: "#e8edf2" }}>
+                                                            {product.name}
+                                                        </div>
+                                                        <div style={{ color: "#ffeb3b" }}>
+                                                            {item.note}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {route[routeStep] && (
@@ -172,14 +238,23 @@ export function TabComprar({
                             <div style={{ fontSize: 13, fontWeight: 700, color: "#4fc3f7", marginBottom: 10 }}>
                                 📍 Productos en esta zona:
                             </div>
-                            {route[routeStep].items.map(routeItem => {
-                                const liveItem = shoppingList.find(si => si.id === routeItem.id);
-                                if (!liveItem) return null;
-                                const product = currentStore?.products?.find(p => p.id === liveItem.productId);
-                                if (!product) return null;
-                                const cat = CATEGORIES.find(c => c.id === product.category);
+                            {(() => {
+                                const items = route[routeStep].items
+                                    .map(routeItem => {
+                                        const liveItem = shoppingList.find(si => si.id === routeItem.id);
+                                        if (!liveItem) return null;
+                                        const product = currentStore?.products?.find(p => p.id === liveItem.productId);
+                                        if (!product) return null;
+                                        const cat = CATEGORIES.find(c => c.id === product.category);
+                                        return { liveItem, product, cat };
+                                    })
+                                    .filter(Boolean);
 
-                                return (
+                                const pending = items.filter(({ liveItem }) => !liveItem.done);
+                                const done = items.filter(({ liveItem }) => liveItem.done);
+                                const ordered = [...pending, ...done];
+
+                                return ordered.map(({ liveItem, product, cat }) => (
                                     <div key={liveItem.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                                         {product.image && (
                                             <img
@@ -213,109 +288,128 @@ export function TabComprar({
                                             )}
                                         </div>
                                     </div>
-                                );
-                            })}
+                                ));
+                            })()}
 
-                            {route[routeStep].items.some(routeItem => {
-                                const liveItem = shoppingList.find(si => si.id === routeItem.id);
-                                return liveItem && !liveItem.done;
-                            }) && (
-                                    <button
-                                        style={{ ...S.btn("#4caf50"), width: "100%", fontSize: 14, padding: "14px", marginTop: 10 }}
-                                        onClick={markAllStopDone}
-                                    >
-                                        ✓ Marcar todos como cogidos
-                                    </button>
-                                )}
+                            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                                <button
+                                    style={{ ...S.btn("#4caf50"), flex: 1, fontSize: 14, padding: "12px" }}
+                                    onClick={markAllStopDone}
+                                >
+                                    COGIDO
+                                </button>
+                            </div>
                         </div>
                     )}
 
                     <div style={S.card}>
                         <div style={S.cardTitle}>📋 Lista completa del recorrido</div>
                         <div style={{ maxHeight: 400, overflowY: "auto" }}>
-                            {route.map((stop, stopIdx) => (
-                                <div key={stopIdx} style={{ marginBottom: 12 }}>
-                                    <div style={{
-                                        fontSize: 11,
-                                        fontWeight: 700,
-                                        color: stopIdx < routeStep ? "#4caf50" : stopIdx === routeStep ? "#4fc3f7" : "#6b8a9e",
-                                        marginBottom: 6,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 6,
-                                    }}>
+                            {(() => {
+                                const indexedStops = route.map((stop, idx) => ({ stop, idx }));
+                                const hasPending = (s) =>
+                                    s.stop.items.some(ri => {
+                                        const liveItem = shoppingList.find(si => si.id === ri.id);
+                                        return liveItem && !liveItem.done;
+                                    });
+
+                                const pendingStops = indexedStops.filter(hasPending);
+                                const doneStops = indexedStops.filter(s => !hasPending(s));
+                                const orderedStops = [...pendingStops, ...doneStops];
+
+                                return orderedStops.map(({ stop, idx: stopIdx }) => (
+                                    <div key={stopIdx} style={{ marginBottom: 12 }}>
                                         <div style={{
-                                            width: 20,
-                                            height: 20,
-                                            borderRadius: "50%",
-                                            background: stopIdx < routeStep ? "#4caf50" : stopIdx === routeStep ? "#4fc3f7" : "rgba(255,255,255,0.1)",
+                                            fontSize: 11,
+                                            fontWeight: 700,
+                                            color: stopIdx < routeStep ? "#4caf50" : stopIdx === routeStep ? "#4fc3f7" : "#6b8a9e",
+                                            marginBottom: 6,
                                             display: "flex",
                                             alignItems: "center",
-                                            justifyContent: "center",
-                                            fontSize: 10,
-                                            fontWeight: 700,
-                                            color: stopIdx <= routeStep ? "#fff" : "#6b8a9e",
+                                            gap: 6,
                                         }}>
-                                            {stopIdx < routeStep ? "✓" : stopIdx + 1}
-                                        </div>
-                                        Parada {stopIdx + 1}
-                                        {stopIdx === routeStep && " ← Estás aquí"}
-                                    </div>
-                                    {stop.items.map(routeItem => {
-                                        const liveItem = shoppingList.find(si => si.id === routeItem.id);
-                                        if (!liveItem) return null;
-                                        const product = currentStore?.products?.find(p => p.id === liveItem.productId);
-                                        if (!product) return null;
-                                        const cat = CATEGORIES.find(c => c.id === product.category);
-
-                                        return (
-                                            <div
-                                                key={liveItem.id}
-                                                style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 8,
-                                                    padding: "6px 8px",
-                                                    background: "rgba(255,255,255,0.02)",
-                                                    borderRadius: 8,
-                                                    marginBottom: 4,
-                                                    opacity: liveItem.done ? 0.6 : 1,
-                                                }}
-                                            >
-                                                {product.image && (
-                                                    <img
-                                                        src={product.image}
-                                                        alt={product.name}
-                                                        style={{
-                                                            width: 32,
-                                                            height: 32,
-                                                            objectFit: "cover",
-                                                            borderRadius: 6,
-                                                            border: `2px solid ${cat?.color}`,
-                                                        }}
-                                                    />
-                                                )}
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{
-                                                        fontSize: 13,
-                                                        fontWeight: 600,
-                                                        color: liveItem.done ? "#4caf50" : "#e8edf2",
-                                                        textDecoration: liveItem.done ? "line-through" : "none",
-                                                    }}>
-                                                        {product.name}
-                                                        <span style={{ ...S.tag(cat?.color), marginLeft: 6, fontSize: 9 }}>
-                                                            ×{liveItem.qty}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                {liveItem.done && (
-                                                    <div style={{ color: "#4caf50", fontSize: 14 }}>✓</div>
-                                                )}
+                                            <div style={{
+                                                width: 20,
+                                                height: 20,
+                                                borderRadius: "50%",
+                                                background: stopIdx < routeStep ? "#4caf50" : stopIdx === routeStep ? "#4fc3f7" : "rgba(255,255,255,0.1)",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                fontSize: 10,
+                                                fontWeight: 700,
+                                                color: stopIdx <= routeStep ? "#fff" : "#6b8a9e",
+                                            }}>
+                                                {stopIdx < routeStep ? "✓" : stopIdx + 1}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            ))}
+                                            Parada {stopIdx + 1}
+                                            {stopIdx === routeStep && " ← Estás aquí"}
+                                        </div>
+                                        {(() => {
+                                            const items = stop.items
+                                                .map(routeItem => {
+                                                    const liveItem = shoppingList.find(si => si.id === routeItem.id);
+                                                    if (!liveItem) return null;
+                                                    const product = currentStore?.products?.find(p => p.id === liveItem.productId);
+                                                    if (!product) return null;
+                                                    const cat = CATEGORIES.find(c => c.id === product.category);
+                                                    return { liveItem, product, cat };
+                                                })
+                                                .filter(Boolean);
+
+                                            const pending = items.filter(({ liveItem }) => !liveItem.done);
+                                            const done = items.filter(({ liveItem }) => liveItem.done);
+                                            const ordered = [...pending, ...done];
+
+                                            return ordered.map(({ liveItem, product, cat }) => (
+                                                <div
+                                                    key={liveItem.id}
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 8,
+                                                        padding: "6px 8px",
+                                                        background: "rgba(255,255,255,0.02)",
+                                                        borderRadius: 8,
+                                                        marginBottom: 4,
+                                                        opacity: liveItem.done ? 0.6 : 1,
+                                                    }}
+                                                >
+                                                    {product.image && (
+                                                        <img
+                                                            src={product.image}
+                                                            alt={product.name}
+                                                            style={{
+                                                                width: 32,
+                                                                height: 32,
+                                                                objectFit: "cover",
+                                                                borderRadius: 6,
+                                                                border: `2px solid ${cat?.color}`,
+                                                            }}
+                                                        />
+                                                    )}
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{
+                                                            fontSize: 13,
+                                                            fontWeight: 600,
+                                                            color: liveItem.done ? "#4caf50" : "#e8edf2",
+                                                            textDecoration: liveItem.done ? "line-through" : "none",
+                                                        }}>
+                                                            {product.name}
+                                                            <span style={{ ...S.tag(cat?.color), marginLeft: 6, fontSize: 9 }}>
+                                                                ×{liveItem.qty}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {liveItem.done && (
+                                                        <div style={{ color: "#4caf50", fontSize: 14 }}>✓</div>
+                                                    )}
+                                                </div>
+                                            ));
+                                        })()}
+                                    </div>
+                                ));
+                            })()}
                         </div>
                     </div>
 
@@ -324,7 +418,7 @@ export function TabComprar({
                             background: "#4fc3f7",
                             height: "100%",
                             borderRadius: 10,
-                            width: `${((routeStep + 1) / route.length) * 100}%`,
+                            width: `${(Math.min(routeStep + 1, route.length) / route.length) * 100}%`,
                             transition: "width 0.4s ease",
                         }} />
                     </div>

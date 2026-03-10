@@ -8,9 +8,10 @@ export function useAppStore() {
     const [stores, setStores] = useState(() => {
         try {
             const saved = localStorage.getItem("rutamarket_stores");
-            return saved ? JSON.parse(saved) : DEFAULT_STORES;
+            const parsed = saved ? JSON.parse(saved) : DEFAULT_STORES;
+            return parsed.map(s => ({ favorite: false, ...s }));
         } catch {
-            return DEFAULT_STORES;
+            return DEFAULT_STORES.map(s => ({ favorite: false, ...s }));
         }
     });
 
@@ -29,6 +30,15 @@ export function useAppStore() {
             return saved ? JSON.parse(saved) : [];
         } catch {
             return [];
+        }
+    });
+
+    const [lastPurchases, setLastPurchases] = useState(() => {
+        try {
+            const saved = localStorage.getItem("rutamarket_lastPurchases");
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
         }
     });
 
@@ -62,6 +72,14 @@ export function useAppStore() {
             console.error("Error saving current store ID:", e);
         }
     }, [currentStoreId]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem("rutamarket_lastPurchases", JSON.stringify(lastPurchases));
+        } catch (e) {
+            console.error("Error saving last purchases:", e);
+        }
+    }, [lastPurchases]);
 
     const currentStore = stores.find(s => s.id === currentStoreId);
 
@@ -97,41 +115,46 @@ export function useAppStore() {
     };
 
     const toggleDone = (itemId) => {
-        setShoppingList(prev => {
-            const newList = prev.map(i => i.id === itemId ? { ...i, done: !i.done } : i);
-
-            if (shoppingStarted && route[routeStep]) {
-                const currentStop = route[routeStep];
-                const toggledItem = newList.find(si => si.id === itemId);
-
-                if (toggledItem && toggledItem.done) {
-                    const allDone = currentStop.items.every(stopItem => {
-                        const liveItem = newList.find(si => si.id === stopItem.id);
-                        return liveItem?.done === true;
-                    });
-
-                    if (allDone && routeStep < route.length - 1) {
-                        setTimeout(() => setRouteStep(r => r + 1), 300);
-                    }
-                }
-            }
-            return newList;
-        });
+        setShoppingList(prev =>
+            prev.map(i => i.id === itemId ? { ...i, done: !i.done } : i)
+        );
     };
 
     const markAllStopDone = () => {
+        // Marcar todos los productos de la parada actual como cogidos
         setShoppingList(prev => {
+            if (!route[routeStep]) return prev;
             const itemsToComplete = route[routeStep].items.map(ri => ri.id);
-            const newList = prev.map(i =>
+            return prev.map(i =>
                 itemsToComplete.includes(i.id) ? { ...i, done: true } : i
             );
-
-            if (routeStep < route.length - 1) {
-                setTimeout(() => setRouteStep(r => r + 1), 300);
-            }
-
-            return newList;
         });
+
+        // Avanzar una parada; si estamos en la última, saltar al estado "salida"
+        setRouteStep(prev => {
+            if (!route.length) return prev;
+            if (prev >= route.length - 1) {
+                return route.length;
+            }
+            return prev + 1;
+        });
+    };
+
+    const nextStop = () => {
+        setRouteStep(prev => {
+            if (prev >= route.length - 1) return prev;
+            return prev + 1;
+        });
+    };
+
+    const setItemNote = (itemId, note, noteImage) => {
+        setShoppingList(prev =>
+            prev.map(i =>
+                i.id === itemId
+                    ? { ...i, note: note || null, noteImage: noteImage || null }
+                    : i
+            )
+        );
     };
 
     const startShopping = () => {
@@ -164,6 +187,29 @@ export function useAppStore() {
     };
 
     const stopShopping = () => {
+        // Guardar última compra para el supermercado actual
+        setLastPurchases(prev => {
+            const completedNow = shoppingList.filter(i => {
+                if (!i.done) return false;
+                const product = currentStore?.products?.find(p => p.id === i.productId);
+                return !!product;
+            });
+            return {
+                ...prev,
+                [currentStoreId]: completedNow.map(i => ({
+                    id: i.id,
+                    productId: i.productId,
+                    qty: i.qty,
+                })),
+            };
+        });
+
+        // Al terminar la compra limpiamos notas sólo de los productos del supermercado actual
+        setShoppingList(prev => prev.map(i => {
+            const product = currentStore?.products?.find(p => p.id === i.productId);
+            if (!product) return i;
+            return { ...i, note: null, noteImage: null };
+        }));
         setShoppingStarted(false);
         setRoute([]);
         setRouteStep(0);
@@ -186,6 +232,9 @@ export function useAppStore() {
         removeFromList,
         toggleDone,
         markAllStopDone,
+        nextStop,
+        setItemNote,
+        lastPurchases, setLastPurchases,
         startShopping,
         stopShopping
     };

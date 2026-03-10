@@ -22,7 +22,8 @@ export function computeOptimalRoute(items, entrance, exit, store) {
     const getDist = (a, b) => {
         const dx = a.x - b.x;
         const dy = a.y - b.y;
-        return Math.sqrt(dx * dx + dy * dy);
+        const weightY = 1.2;
+        return Math.sqrt(dx * dx + (dy * weightY) * (dy * weightY));
     };
 
     const unvisited = new Set(positions.map((_, i) => i));

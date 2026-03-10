@@ -13,35 +13,68 @@ export function TabLista({
     toggleDone,
     changeQty,
     removeFromList,
-    setTab
+    setTab,
+    openNoteForItem,
+    lastPurchases
 }) {
     const pendingItems = shoppingList.filter(i => !i.done);
-    const doneItems = shoppingList.filter(i => i.done);
+    const lastPurchaseForStore = (lastPurchases && lastPurchases[currentStoreId]) || [];
+    const favoriteStores = stores.filter(s => s.favorite);
+    const visibleStores = favoriteStores.length > 0 ? favoriteStores : stores;
 
     return (
         <div style={S.page}>
             <div style={S.card}>
                 <div style={S.cardTitle}>🏪 Supermercado</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {stores.map(store => (
-                        <button
-                            key={store.id}
-                            style={{
-                                flex: "1 1 calc(50% - 4px)",
-                                padding: "12px 10px",
-                                borderRadius: 10,
-                                border: currentStoreId === store.id ? "2px solid #4fc3f7" : "1px solid rgba(255,255,255,0.12)",
-                                background: currentStoreId === store.id ? "#4fc3f722" : "rgba(255,255,255,0.04)",
-                                color: currentStoreId === store.id ? "#4fc3f7" : "#8a9aaa",
-                                cursor: "pointer",
-                                fontSize: 13,
-                                fontWeight: 600,
-                            }}
-                            onClick={() => setCurrentStoreId(store.id)}
-                        >
-                            {store.name}
-                        </button>
-                    ))}
+                    {visibleStores.map(store => {
+                        const storePending = shoppingList.filter(i => {
+                            if (i.done) return false;
+                            const prods = store.products || [];
+                            return prods.some(p => p.id === i.productId);
+                        }).length;
+
+                        return (
+                            <button
+                                key={store.id}
+                                style={{
+                                    flex: "1 1 calc(50% - 4px)",
+                                    padding: "12px 10px",
+                                    borderRadius: 10,
+                                    border: currentStoreId === store.id ? "2px solid #4fc3f7" : "1px solid rgba(255,255,255,0.12)",
+                                    background: currentStoreId === store.id ? "#4fc3f722" : "rgba(255,255,255,0.04)",
+                                    color: currentStoreId === store.id ? "#4fc3f7" : "#8a9aaa",
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 6,
+                                }}
+                                onClick={() => setCurrentStoreId(store.id)}
+                            >
+                                <span>{store.name}</span>
+                                {storePending > 0 && (
+                                    <span style={{
+                                        background: "#ff6b6b",
+                                        color: "#fff",
+                                        borderRadius: "999px",
+                                        minWidth: 20,
+                                        height: 20,
+                                        padding: "0 6px",
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                    }}>
+                                        {storePending}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
                     <button
                         style={{
                             flex: "1 1 calc(50% - 4px)",
@@ -98,6 +131,11 @@ export function TabLista({
                                         {product.name}
                                     </div>
                                     <span style={S.tag(cat?.color)}>{cat?.name.split(" ")[0]}</span>
+                                    {item.note && (
+                                        <div style={{ marginTop: 4, fontSize: 11, color: "#ffeb3b" }}>
+                                            🔖 Nota guardada
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                     <button
@@ -141,6 +179,24 @@ export function TabLista({
                                     </button>
                                     <button
                                         style={{
+                                            background: "rgba(79,195,247,0.1)",
+                                            border: "1px solid rgba(79,195,247,0.5)",
+                                            borderRadius: 6,
+                                            width: 26,
+                                            height: 26,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer",
+                                            color: "#4fc3f7",
+                                            fontSize: 14,
+                                        }}
+                                        onClick={() => openNoteForItem(item.id, false)}
+                                    >
+                                        📝
+                                    </button>
+                                    <button
+                                        style={{
                                             background: "#ff6b6b22",
                                             border: "1px solid #ff6b6b44",
                                             borderRadius: 6,
@@ -164,26 +220,20 @@ export function TabLista({
                 </div>
             )}
 
-            {doneItems.length > 0 && (
+            {lastPurchaseForStore.length > 0 && (
                 <div style={{ ...S.card, opacity: 0.6 }}>
-                    <div style={S.cardTitle}>✅ Ya tengo ({doneItems.length})</div>
-                    {doneItems.map(item => {
+                    <div style={S.cardTitle}>✅ Última compra</div>
+                    {lastPurchaseForStore.map(item => {
                         const product = currentStore?.products?.find(p => p.id === item.productId);
                         if (!product) return null;
                         return (
-                            <div key={item.id} style={{ ...S.itemRow, opacity: 0.7 }}>
-                                <div style={{ ...S.check(true), background: "#4fc3f7" }} onClick={() => toggleDone(item.id)}>
+                            <div key={item.id || item.productId} style={{ ...S.itemRow, opacity: 0.7 }}>
+                                <div style={{ ...S.check(true), background: "#4fc3f7" }}>
                                     <span style={{ color: "#0f1923", fontSize: 12 }}>✓</span>
                                 </div>
-                                <div style={{ flex: 1, textDecoration: "line-through", fontSize: 13, color: "#6b8a9e" }}>
+                                <div style={{ flex: 1, fontSize: 13, color: "#6b8a9e" }}>
                                     {product.name} (×{item.qty})
                                 </div>
-                                <button
-                                    style={{ ...S.btnOutline, fontSize: 10, padding: "4px 8px" }}
-                                    onClick={() => addToList(product.id)}
-                                >
-                                    + Añadir más
-                                </button>
                             </div>
                         );
                     })}

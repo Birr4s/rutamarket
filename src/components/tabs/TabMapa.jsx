@@ -1,5 +1,5 @@
 import { MapCanvas } from "../MapCanvas";
-import { CATEGORIES } from "../../constants";
+import { CATEGORIES, DEFAULT_CONSUM_LAYOUT } from "../../constants";
 import { S } from "../../styles";
 
 export function TabMapa({
@@ -10,6 +10,10 @@ export function TabMapa({
     handleMapUpload,
     addingEntrance,
     setAddingEntrance,
+    movingEntranceId,
+    setMovingEntranceId,
+    movingProductId,
+    setMovingProductId,
     openEditStore,
     shoppingList,
     handleMapClick,
@@ -20,7 +24,7 @@ export function TabMapa({
 
     return (
         <div style={S.page}>
-            {!currentStore?.mapImage && (
+            {!currentStore?.mapImage && !currentStore?.mapLayout && (
                 <div style={S.card}>
                     <div style={S.cardTitle}>📷 Sube el mapa del supermercado</div>
                     <input
@@ -35,6 +39,19 @@ export function TabMapa({
                         onClick={() => fileInputRef.current?.click()}
                     >
                         📁 Seleccionar imagen del plano
+                    </button>
+
+                    <button
+                        style={{ ...S.btn("#00A651"), width: "100%" }}
+                        onClick={() => {
+                            setStores(prev => prev.map(s =>
+                                s.id === currentStoreId
+                                    ? { ...s, mapLayout: DEFAULT_CONSUM_LAYOUT }
+                                    : s
+                            ));
+                        }}
+                    >
+                        🧩 Usar plantilla de almacén (Consum)
                     </button>
                 </div>
             )}
@@ -87,23 +104,63 @@ export function TabMapa({
             <div style={S.card}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                     <div style={S.cardTitle}>🗺️ {currentStore?.name}</div>
-                    {currentStore?.mapImage && (
-                        <button
-                            style={{
-                                background: "#4fc3f722",
-                                border: "1px solid #4fc3f7",
-                                borderRadius: 8,
-                                padding: "6px 12px",
-                                fontSize: 11,
-                                fontWeight: 600,
-                                color: "#4fc3f7",
-                                cursor: "pointer",
-                            }}
-                            onClick={openEditStore}
-                        >
-                            ⚙️ Editar
-                        </button>
-                    )}
+                    <div style={{ display: "flex", gap: 8 }}>
+                        {(currentStore?.mapImage || currentStore?.mapLayout) && (
+                            <>
+                                <button
+                                    style={{
+                                        ...S.btnOutline,
+                                        fontSize: 10,
+                                        padding: "6px 10px",
+                                    }}
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    Cambiar mapa
+                                </button>
+                                <button
+                                    style={{
+                                        ...S.btnOutline,
+                                        fontSize: 10,
+                                        padding: "6px 10px",
+                                        borderColor: "#ff6b6b",
+                                        color: "#ff6b6b",
+                                    }}
+                                    onClick={() => {
+                                        setStores(prev => prev.map(s =>
+                                            s.id === currentStoreId
+                                                ? {
+                                                    ...s,
+                                                    mapImage: null,
+                                                    mapLayout: null,
+                                                    entrances: [],
+                                                    products: [],
+                                                }
+                                                : s
+                                        ));
+                                    }}
+                                >
+                                    Eliminar mapa
+                                </button>
+                            </>
+                        )}
+                        {currentStore?.mapImage && (
+                            <button
+                                style={{
+                                    background: "#4fc3f722",
+                                    border: "1px solid #4fc3f7",
+                                    borderRadius: 8,
+                                    padding: "6px 12px",
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: "#4fc3f7",
+                                    cursor: "pointer",
+                                }}
+                                onClick={openEditStore}
+                            >
+                                ⚙️ Editar
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <MapCanvas
                     store={currentStore}
@@ -132,26 +189,45 @@ export function TabMapa({
                         <div key={entrance.id} style={S.itemRow}>
                             <span style={{ fontSize: 20 }}>🚪</span>
                             <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{entrance.name}</span>
-                            <button
-                                style={{
-                                    background: "#ff6b6b22",
-                                    border: "1px solid #ff6b6b44",
-                                    borderRadius: 6,
-                                    padding: "4px 8px",
-                                    fontSize: 10,
-                                    cursor: "pointer",
-                                    color: "#ff6b6b",
-                                }}
-                                onClick={() => {
-                                    setStores(prev => prev.map(s =>
-                                        s.id === currentStoreId
-                                            ? { ...s, entrances: s.entrances.filter(e => e.id !== entrance.id) }
-                                            : s
-                                    ));
-                                }}
-                            >
-                                Eliminar
-                            </button>
+                            <div style={{ display: "flex", gap: 6 }}>
+                                <button
+                                    style={{
+                                        background: "#4fc3f722",
+                                        border: "1px solid #4fc3f744",
+                                        borderRadius: 6,
+                                        padding: "4px 8px",
+                                        fontSize: 10,
+                                        cursor: "pointer",
+                                        color: "#4fc3f7",
+                                    }}
+                                    onClick={() => {
+                                        setMovingEntranceId(entrance.id);
+                                        setAddingEntrance(false);
+                                    }}
+                                >
+                                    Mover
+                                </button>
+                                <button
+                                    style={{
+                                        background: "#ff6b6b22",
+                                        border: "1px solid #ff6b6b44",
+                                        borderRadius: 6,
+                                        padding: "4px 8px",
+                                        fontSize: 10,
+                                        cursor: "pointer",
+                                        color: "#ff6b6b",
+                                    }}
+                                    onClick={() => {
+                                        setStores(prev => prev.map(s =>
+                                            s.id === currentStoreId
+                                                ? { ...s, entrances: s.entrances.filter(e => e.id !== entrance.id) }
+                                                : s
+                                        ));
+                                    }}
+                                >
+                                    Eliminar
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -235,6 +311,25 @@ export function TabMapa({
                                             }}
                                         >
                                             🗑
+                                        </button>
+                                        <button
+                                            style={{
+                                                background: "#4caf5022",
+                                                border: "1px solid #4caf5044",
+                                                borderRadius: 6,
+                                                padding: "4px 8px",
+                                                fontSize: 10,
+                                                cursor: "pointer",
+                                                color: "#4caf50",
+                                                fontWeight: 600,
+                                            }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setMovingProductId(product.id);
+                                                setAddingEntrance(false);
+                                            }}
+                                        >
+                                            Reubicar
                                         </button>
                                     </div>
                                 </div>
